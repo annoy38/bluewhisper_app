@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.SavedStateHandle
 import com.bluewhisper.di.FileManagerEntryPoint
 import com.bluewhisper.domain.model.*
 import com.bluewhisper.presentation.screens.home.AvatarCircle
@@ -34,25 +35,28 @@ import java.util.*
 fun ChatScreen(
     onDisconnect: () -> Unit,
     onViewFile: (ReceivedFile) -> Unit = {},
+    // FR-07.8: NavBackStackEntry-scoped SavedStateHandle is owned by the host
+    // (Navigation.kt). Passing it in keeps ChatScreen testable and avoids the
+    // broken `androidx.navigation.compose.currentBackStackEntryAsState()`
+    // top-level call (it's an extension on NavController, not a free function).
+    savedStateHandle: SavedStateHandle? = null,
     viewModel: ChatViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     // FR-07.8: observe file state updates posted by FileViewerScreen via savedStateHandle
-    val navBackStackEntry = androidx.navigation.compose.currentBackStackEntryAsState()
-    val savedStateHandle = navBackStackEntry.value?.savedStateHandle
     LaunchedEffect(savedStateHandle) {
-        savedStateHandle?.getStateFlow<String?>("fileStateUpdate", null)
-            ?.collect { update ->
+        val handle = savedStateHandle ?: return@LaunchedEffect
+        handle.getStateFlow<String?>("fileStateUpdate", null)
+            .collect { update ->
                 update?.let {
                     val parts = it.split(":")
                     if (parts.size == 2) {
                         val fileId = parts[0]
-                        val newState = com.bluewhisper.domain.model.FileState
-                            .valueOf(parts[1])
+                        val newState = FileState.valueOf(parts[1])
                         viewModel.updateReceivedFileState(fileId, newState)
-                        savedStateHandle.remove<String>("fileStateUpdate")
+                        handle.remove<String>("fileStateUpdate")
                     }
                 }
             }

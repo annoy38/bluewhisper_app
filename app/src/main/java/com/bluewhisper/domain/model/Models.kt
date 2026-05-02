@@ -86,7 +86,7 @@ data class FileMetadata(
 )
 
 @Parcelize
-enum class FileType {
+enum class FileType : Parcelable {
     IMAGE, AUDIO, DOCUMENT, VIDEO;
 
     companion object {
@@ -118,7 +118,7 @@ data class ReceivedFile(
 ) : Parcelable
 
 @Parcelize
-enum class FileState {
+enum class FileState : Parcelable {
     TRANSFERRING,
     RECEIVED_UNVIEWED,
     VIEWING,

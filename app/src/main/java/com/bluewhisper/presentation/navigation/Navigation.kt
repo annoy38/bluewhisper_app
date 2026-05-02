@@ -112,11 +112,12 @@ fun BlueWhisperNavHost(
                     navController.navigate(Routes.DISCONNECT) { popUpTo(Routes.HOME) }
                 },
                 onViewFile = { file ->
-                    navController.currentBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("receivedFile", file)
+                    backStackEntry.savedStateHandle["receivedFile"] = file
                     navController.navigate(Routes.FILE_VIEWER)
                 },
+                // FR-07.8: pass the CHAT entry's SavedStateHandle so the screen
+                // can observe FILE_VIEWER's `fileStateUpdate` posts.
+                savedStateHandle = backStackEntry.savedStateHandle,
                 viewModel = chatViewModel
             )
         }

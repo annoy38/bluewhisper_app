@@ -293,7 +293,10 @@ class ChatViewModel @Inject constructor(
             }
             val pfd = fileManager.openFileDescriptor(uri) ?: run { showToast("Cannot open file"); return@launch }
             try {
-                val filePayload = Payload.fromParcelFileDescriptor(pfd)
+                // Nearby Connections doesn't expose `fromParcelFileDescriptor`;
+                // the `Payload.fromFile(ParcelFileDescriptor)` overload is the
+                // streaming-from-fd entry point.
+                val filePayload = Payload.fromFile(pfd)
                 // Resolve our own nickname so the receiver can attribute the file (FR-10).
                 val myNickname = runCatching {
                     userProfileDataStore.userProfile.first().nickname
