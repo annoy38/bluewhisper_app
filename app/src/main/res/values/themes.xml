@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.BlueWhisper" parent="Theme.Material3.DayNight.NoActionBar">
+    <!--
+      App is Compose-only — androidx.compose.material3:material3 ships no XML
+      themes, so the parent Theme.Material3.DayNight.NoActionBar (which lives
+      in com.google.android.material:material, not on our classpath) cannot be
+      used. This XML theme is only the launch theme before Compose mounts;
+      AppCompat is already a dependency for the per-app locale API, so we
+      reuse its DayNight NoActionBar parent.
+    -->
+    <style name="Theme.BlueWhisper" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
