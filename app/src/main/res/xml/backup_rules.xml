@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  BlueWhisper backup rules.
+  Messages are RAM-only so there is nothing to exclude there.
+  We exclude the Room DB because it only contains saved-file metadata,
+  which the user should re-save themselves. DataStore (profile) is safe to back up.
+-->
+<full-backup-content>
+    <!-- Exclude Room database — user manages their own saved files -->
+    <exclude domain="database" path="bluewhisper_db" />
+    <exclude domain="database" path="bluewhisper_db-shm" />
+    <exclude domain="database" path="bluewhisper_db-wal" />
+    <!-- Exclude temp received files — session data must never be backed up -->
+    <exclude domain="cache" path="received/" />
+</full-backup-content>

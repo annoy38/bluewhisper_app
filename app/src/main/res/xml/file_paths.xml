@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- App-internal cache for received temp files -->
+    <cache-path name="received_temp" path="received/" />
+    <!-- External app-specific storage (legacy fallback) -->
+    <external-files-path name="saved_files_legacy" path="BlueWhisper/Received/" />
+    <!-- Public Downloads dir on API 26-28 (legacy) — needed so we can grant URI
+         permissions when sharing/opening files saved via Environment.DIRECTORY_DOWNLOADS -->
+    <external-path name="public_downloads" path="Download/BlueWhisper/Received/" />
+</paths>

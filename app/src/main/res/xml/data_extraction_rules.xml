@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="database" path="bluewhisper_db" />
+        <exclude domain="database" path="bluewhisper_db-shm" />
+        <exclude domain="database" path="bluewhisper_db-wal" />
+        <exclude domain="cache" path="received/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="database" path="bluewhisper_db" />
+        <exclude domain="cache" path="received/" />
+    </device-transfer>
+</data-extraction-rules>

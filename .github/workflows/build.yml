@@ -1,0 +1,87 @@
+name: Build BlueWhisper APK
+
+on:
+  # Build on every push and PR
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+  # Allow manual trigger from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platforms;android-34
+            build-tools;34.0.0
+            platform-tools
+
+      - name: Set up Gradle
+        # The repo ships gradle-wrapper.properties (Gradle 8.4) but no wrapper
+        # jar / gradlew script — this action provides a `gradle` command that
+        # honours the version pinned in gradle/wrapper/gradle-wrapper.properties.
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4'
+          cache-read-only: false
+
+      - name: Regenerate Gradle wrapper
+        # Make `./gradlew` available for any downstream user / future steps.
+        run: gradle wrapper --gradle-version 8.4 --distribution-type bin
+
+      - name: Build debug APK
+        run: ./gradlew --no-daemon --stacktrace assembleDebug
+
+      - name: Run unit tests
+        # Surfaces test failures alongside the APK build so we don't ship
+        # a broken artifact silently. Continues even if tests fail so the
+        # APK still gets uploaded for inspection.
+        continue-on-error: true
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n1)
+          if [ -z "$APK_PATH" ]; then
+            echo "::error::No APK produced under app/build/outputs/apk/debug/"
+            exit 1
+          fi
+          echo "Found APK at $APK_PATH"
+          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          ls -lh "$APK_PATH"
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlueWhisper-debug-${{ github.sha }}
+          path: ${{ steps.apk.outputs.path }}
+          # Keep the artifact for 30 days so you have time to download it.
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload unit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports-${{ github.sha }}
+          path: app/build/reports/tests/
+          retention-days: 14
+          if-no-files-found: ignore

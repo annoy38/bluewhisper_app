@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ব্লুহুইসপার</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_greeting">হ্যালো! 👋</string>
+    <string name="onboarding_question">মানুষ আপনাকে কী বলে ডাকবে?</string>
+    <string name="onboarding_nickname_hint">আপনার নাম...</string>
+    <string name="onboarding_pick_avatar">আপনার অবতার বেছে নিন</string>
+    <string name="onboarding_language">ভাষা</string>
+    <string name="onboarding_start">✦ শুরু করুন →</string>
+    <string name="onboarding_nickname_empty">অনুগ্রহ করে একটি নাম লিখুন</string>
+
+    <!-- Home -->
+    <string name="home_scanning">কাছের মানুষ খুঁজছি...</string>
+    <string name="home_scanning_paused">স্ক্যানিং বিরতিতে</string>
+    <string name="home_no_users">কাছে কেউ নেই</string>
+    <string name="home_no_users_sub">বন্ধুকে ব্লুহুইসপার খুলতে বলুন\nএবং ৩০ মিটারের মধ্যে আসতে বলুন!</string>
+    <string name="home_chat_now">✦ চ্যাট করুন</string>
+    <string name="home_people_nearby">%d জন কাছে আছেন</string>
+    <string name="home_very_close">খুব কাছে</string>
+    <string name="home_nearby">কাছাকাছি</string>
+    <string name="home_far">দূরে</string>
+
+    <!-- Connection -->
+    <string name="conn_connecting_to">সংযোগ হচ্ছে...</string>
+    <string name="conn_waiting">%s এর অনুমোদনের অপেক্ষায়...</string>
+    <string name="conn_incoming">🔵 চ্যাটের অনুরোধ এসেছে</string>
+    <string name="conn_wants_to_chat">চ্যাট করতে চাইছেন!</string>
+    <string name="conn_accept">✅ গ্রহণ করুন ও চ্যাট করুন</string>
+    <string name="conn_decline">✕ এখন নয়</string>
+    <string name="conn_cancel">✕ অনুরোধ বাতিল করুন</string>
+    <string name="conn_auto_closes">%d সেকেন্ডে বন্ধ হবে</string>
+    <string name="conn_no_response">কোনো সাড়া নেই — তারা হয়তো ব্যস্ত</string>
+    <string name="conn_rejected">এখন পাওয়া যাচ্ছে না</string>
+
+    <!-- Chat -->
+    <string name="chat_message_hint">বার্তা... (%d টি বাকি)</string>
+    <string name="chat_limit_reached">বার্তার সীমা পূর্ণ হয়েছে</string>
+    <string name="chat_end_chat">চ্যাট শেষ করুন</string>
+    <string name="chat_is_typing">%s টাইপ করছেন...</string>
+    <string name="chat_limit_banner">✋ ২০টি বার্তা পূর্ণ হয়েছে</string>
+    <string name="chat_disconnect_title">এই চ্যাট শেষ করবেন?</string>
+    <string name="chat_disconnect_message">সমস্ত বার্তা চিরতরে মুছে যাবে।</string>
+    <string name="chat_yes_end">হ্যাঁ, চ্যাট শেষ করুন</string>
+    <string name="chat_keep">চ্যাট চালিয়ে যান</string>
+
+    <!-- File -->
+    <string name="file_vanishes_in">⏱ মুছে যাবে</string>
+    <string name="file_save">💾 ফোনে সেভ করুন</string>
+    <string name="file_saved">✅ ব্লুহুইসপার ফোল্ডারে সেভ হয়েছে!</string>
+    <string name="file_vanished">💨 মুছে গেছে</string>
+    <string name="file_disclaimer">টাইমার শেষ হলে ফাইল মুছে যাবে। সেভ করা স্থায়ী।</string>
+    <string name="file_tap_to_view">দেখতে ট্যাপ করুন</string>
+    <string name="file_too_large">ফাইল অনেক বড়। সর্বোচ্চ ২৫ এমবি।</string>
+
+    <!-- Disconnect -->
+    <string name="disconnect_title">চ্যাট মুছে গেছে</string>
+    <string name="disconnect_body">সব কিছু চলে গেছে।\nআপনার কথোপকথন সম্পূর্ণ গোপন ছিল।</string>
+    <string name="disconnect_privacy">🔒 কোনো চিহ্ন নেই। কোনো রেকর্ড নেই।</string>
+    <string name="disconnect_privacy_sub">আমরাও জানি না আপনারা কী বলেছেন।</string>
+    <string name="disconnect_returning">হোম স্ক্রিনে ফিরছি...</string>
+
+    <!-- Settings -->
+    <string name="settings_title">সেটিংস</string>
+    <string name="settings_my_profile">আমার প্রোফাইল</string>
+    <string name="settings_privacy">গোপনীয়তা</string>
+    <string name="settings_language">ভাষা</string>
+    <string name="settings_storage">স্টোরেজ</string>
+    <string name="settings_about">সম্পর্কে</string>
+    <string name="settings_visibility">অন্যদের কাছে দেখান</string>
+    <string name="settings_visible">কাছের ব্যবহারকারীরা দেখতে পাচ্ছেন</string>
+    <string name="settings_hidden">সবার কাছ থেকে লুকানো</string>
+    <string name="settings_files">প্রাপ্ত ফাইল</string>
+    <string name="settings_clear">সব ফাইল মুছুন</string>
+    <string name="settings_clear_confirm">এটি সমস্ত সেভ করা ফাইল স্থায়ীভাবে মুছে দেবে।</string>
+    <string name="settings_version">সংস্করণ ১.০.০</string>
+    <string name="settings_tagline">ব্যক্তিগত। কাছের। চলে যায়।</string>
+
+    <!-- Errors -->
+    <string name="err_bt_off">ব্লুটুথ বন্ধ আছে</string>
+    <string name="err_bt_off_msg">ব্লুহুইসপারের কাছের মানুষ খুঁজতে ব্লুটুথ দরকার।\nইন্টারনেটের প্রয়োজন নেই।</string>
+    <string name="err_permission">অনুমতি প্রয়োজন</string>
+    <string name="err_permission_msg">ব্লুহুইসপারের কাছের ব্যবহারকারী খুঁজতে ব্লুটুথ অনুমতি দরকার।</string>
+    <string name="err_ble">ডিভাইস সামঞ্জস্যপূর্ণ নয়</string>
+    <string name="err_ble_msg">আপনার ডিভাইস Bluetooth Low Energy (BLE 4.0+) সমর্থন করে না।</string>
+    <string name="err_turn_on_bt">ব্লুটুথ চালু করুন →</string>
+    <string name="err_grant_permission">অনুমতি দিন →</string>
+    <string name="err_try_again">আবার চেষ্টা করুন →</string>
+    <string name="err_open_settings">সেটিংস খুলুন</string>
+    <string name="err_auto_resume">ব্লুটুথ চালু হলে অ্যাপ স্বয়ংক্রিয়ভাবে চালু হবে।</string>
+</resources>
