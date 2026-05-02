@@ -26,12 +26,20 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK
+        # Sets up cmdline-tools and PATH, accepts licenses. The hosted Ubuntu
+        # runner already ships an Android SDK at /usr/local/lib/android/sdk;
+        # this step exposes `sdkmanager` for the next step.
         uses: android-actions/setup-android@v3
-        with:
-          packages: |
-            platforms;android-34
-            build-tools;34.0.0
-            platform-tools
+
+      - name: Install required Android SDK packages
+        # Run sdkmanager directly — passing newline-separated packages through
+        # the action's `packages` input was being concatenated into one bogus
+        # package name. Quoting each package on its own line is the reliable
+        # path. `yes | ... --licenses` is a safety net in case any package
+        # carries a license that wasn't pre-accepted by the action.
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
 
       - name: Set up Gradle
         # The repo ships gradle-wrapper.properties (Gradle 8.4) but no wrapper
