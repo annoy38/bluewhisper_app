@@ -49,17 +49,36 @@ Unlike Nearby's discrete payloads, RFCOMM is a continuous stream. Every frame:
 - `transferId` is app-assigned (`Long`) — replaces Nearby's `payload.id`. It stays a
   `Long` so `Models.FileMetadata.payloadId` and `ChatViewModel` need minimal edits.
 
-## 3. Discovery
+## 3. Discovery — Classic Bluetooth for BOTH discovery and data (decided 2026-07-04)
 
-- **Preferred (BLE):** advertise a fixed service UUID; put `nickname|avatarId` in the
-  scan-response (fits in 31 bytes for a 1–15 char nickname). RSSI → `SignalStrength`
-  (US-3.5); prune peers unseen >10 s (US-3.3); duty-cycle scan (US-3.7).
-- **Fallback (Classic):** used when `adapter.isMultipleAdvertisementSupported() == false`
-  (budget/old devices). Discoverability via `ACTION_REQUEST_DISCOVERABLE`; discovery via
-  `startDiscovery()` + `ACTION_FOUND` (RSSI from `EXTRA_RSSI`); device name carries
-  `nickname|avatarId`.
-- Data channel is **Classic RFCOMM in both modes** (`BluetoothServerSocket.accept()` on the
-  advertiser; `BluetoothSocket.connect()` on the requester, fixed SPP UUID).
+**Why not BLE for discovery:** RFCOMM needs the peer's **classic BR/EDR MAC**, but a BLE
+scan returns a **randomized/resolvable BLE address** by default (and `getAddress()` is
+blocked since Android 6, so we can't advertise our own MAC either). A BLE-found device
+therefore can't be reliably RFCOMM-connected. Classic inquiry returns the real MAC, so it
+is the correct rendezvous for an RFCOMM data channel — and it is the most compatible path
+across all brands + old Android (API 5+), which is the priority.
+
+- **Discovery:** classic inquiry — `adapter.startDiscovery()` + a runtime `BroadcastReceiver`
+  for `ACTION_FOUND` (device MAC + name + `EXTRA_RSSI` → `SignalStrength`, US-3.5) and
+  `ACTION_DISCOVERY_FINISHED` (duty-cycle restart, US-3.7). Peers are identified by a name
+  marker: the adapter name is set to **`BW|nickname|avatarId`**; only `BW|`-prefixed devices
+  are shown. Prune peers unseen >10 s (US-3.3).
+- **Discoverability (US-3.4):** to be *found by inquiry* a device must be discoverable, which
+  on classic BT requires the system `ACTION_REQUEST_DISCOVERABLE` prompt (max 300 s), launched
+  from an Activity. `startAdvertising` sets the name + starts the RFCOMM server; the **UI owns
+  launching the discoverable intent** (add to Home's toggle). Being *connectable* (accepting
+  RFCOMM) does not need the prompt — only being *findable* does.
+- **Data channel:** Classic RFCOMM — `listenUsingRfcommWithServiceRecord(APP_NAME, APP_UUID)`
+  accept loop on the advertiser; `createRfcommSocketToServiceRecord(APP_UUID)` + `connect()`
+  on the requester.
+- **BLE (future, optional):** may later be added purely as a low-power presence beacon to
+  soften the discoverability prompt — never as the RFCOMM rendezvous.
+
+### 3a. App-level connect/accept handshake (RFCOMM has no request/accept primitive)
+Once an RFCOMM socket connects, the link is up; accept/decline is an app handshake over it:
+1. Requester connects → sends `CONNECT_REQUEST` (`nickname|avatarId|nonceHex`) → state `Requesting`.
+2. Advertiser's accept loop reads `CONNECT_REQUEST` → state `IncomingRequest` → UI/notification.
+3. Accept → `CONNECT_ACCEPT` → both proceed to KEX. Decline → `CONNECT_REJECT` → close.
 
 ## 4. Key-exchange confirmation (US-6.1) — the new step
 
