@@ -131,7 +131,18 @@ session, one key.
 
 ---
 
-## 7. Not yet done (rest of Track A)
-The interface + framing/confirmation contract are defined. Still to build: the two
-`Transport` implementations, the DI rebind, and removal of Nearby. Those proceed after
-B and C start against this contract.
+## 7. Implementation status (2026-07-04)
+
+Built and CI-compile-verified on branch `track-a/native-transport-foundation` (additive; Nearby still live):
+- ✅ `Transport` interface + `BTEvent` additions
+- ✅ `wire/Framer`, `wire/SasGenerator`, `wire/Control` (+ Framer/Sas unit tests, passing)
+- ✅ `RfcommConnection` — framed link, chunked AES file transfer
+- ✅ `BluetoothTransport` — classic inquiry discovery + RFCOMM + handshake + KEX/SAS + nonce tie-break
+- ✅ `src/debug` on-device test harness ("BW Transport Test" launcher)
+
+**Pending:** (1) **device testing on two phones** — emulators have no Bluetooth radio, so this cannot be
+validated any other way; see the test guide in `AUDIT_AND_PLAN.md` §8. (2) **The production flip** — rebind
+DI `Nearby → Transport`, migrate consumers off `Payload`, wire the SAS-confirmation UI, add the
+discoverable intent to Home, delete `play-services-nearby`. The flip touches Track B/C files — coordinate.
+
+Full per-commit status and file list: `AUDIT_AND_PLAN.md` §7.

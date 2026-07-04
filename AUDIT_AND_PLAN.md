@@ -131,3 +131,60 @@ Everything the user sees and reads.
 - **minSdk stays 26.** No lowering; ~99% device coverage is acceptable.
 - **Authenticated key exchange:** ADD a short numeric-compare confirmation (both peers see the same code; one tap to confirm) to close the MITM gap. This becomes part of Track A's US-6.1 work and adds a confirmation step to the connection flow (both Sender and Receiver) before the chat opens.
 - **`saved_files` is the intended durable exception to zero-trace.** Only explicitly-saved files persist. Settings MUST state this plainly (US-14.4): "Messages and unsaved files vanish on disconnect. Files you tap Save are kept in your Downloads." Track C owns the Settings copy; Track B ensures no wipe path touches saved files.
+
+---
+
+## 7. Track A — implementation status (as of 2026-07-04)
+
+**Branch:** `track-a/native-transport-foundation` (off `main`). All commits are **additive** —
+Google Nearby remains the live, DI-bound transport, so the app still builds and runs unchanged.
+Every commit was compile-verified on CI (`assembleDebug`).
+
+| Commit | Contents | CI |
+|---|---|---|
+| `10b79d0` | `Transport` interface + `BTEvent` additions (KeyConfirmationRequired/Rejected, KeyExchangeFailed); `wire/Framer`, `wire/SasGenerator` + unit tests | ✅ compile + tests pass |
+| `dd18f07` | `wire/Control` (CONTROL opcodes); `RfcommConnection` (framed link, chunked AES file transfer, partial-file cleanup) | ✅ compile |
+| `c68156c` | `BluetoothTransport` (classic inquiry discovery + RFCOMM + connect/accept handshake + KEX/SAS + nonce tie-break) | ✅ compile |
+| `16593de` | `src/debug` on-device test harness (`TransportTestActivity` + `TransportTestViewModel` + debug manifest) | ✅ compile, debug APK built |
+
+**Files delivered (all under `app/src/main/java/com/bluewhisper/bluetooth/` unless noted):**
+- `Transport.kt` — transport-agnostic interface (no Play Services types); `OutgoingFile`/`IncomingFile`/`FileTransferProgress`/`TransferStatus`/`PeerId`.
+- `wire/Framer.kt` — `[type][u32 len][body]` frame codec (+ `wire/FramerTest.kt`).
+- `wire/SasGenerator.kt` — 6-digit SHA-256 SAS over sorted RSA pubkeys (+ `wire/SasGeneratorTest.kt`).
+- `wire/Control.kt` — CONTROL-frame opcodes (connect/accept/reject, KEX, SAS accept/reject, disconnect).
+- `RfcommConnection.kt` — connected-link handler: read loop, framed send, app-layer AES on messages + files, chunked streaming with progress.
+- `BluetoothTransport.kt` — the `Transport` implementation (classic discovery + RFCOMM).
+- `app/src/debug/.../TransportTestActivity.kt`, `TransportTestViewModel.kt`, `app/src/debug/AndroidManifest.xml` — debug-only harness.
+
+**CI note:** the build is green, but `testDebugUnitTest` is `continue-on-error`, so the workflow shows
+"success" even though **5–7 pre-existing ViewModel tests fail** (Chat/Connection/FileViewer — timing-flaky
++ the vanish/secureDelete/WakeLock defects from §3). **None are Track A.** They are Track B/C scope.
+
+### Still pending on Track A
+1. **Device testing (blocking).** Everything is compile-verified only. Classic discovery, RFCOMM, the
+   handshake, KEX and SAS **cannot run on an emulator** (AVDs have no Bluetooth radio) — they need **two
+   real Android devices**. Use the debug harness (below).
+2. **The production flip (atomic, coordinate with Tracks B/C).** Rebind DI `Nearby → Transport`; migrate
+   `ChatViewModel` (off `Payload`), `HomeViewModel`, `ConnectionViewModel`, the service, `MainActivity`;
+   wire a SAS-confirmation screen to `KeyConfirmationRequired`/`KeyConfirmationRejected`; add the
+   `ACTION_REQUEST_DISCOVERABLE` intent to Home (US-3.4); delete `play-services-nearby`.
+
+## 8. On-device test guide (two phones)
+
+The debug APK (CI artifact `BlueWhisper-debug-<sha>`) installs a separate **"BW Transport Test"** launcher
+icon that drives `BluetoothTransport` directly, independent of the production app.
+
+1. **Get the APK:** open the branch's CI run → **Artifacts** → download `BlueWhisper-debug-<sha>`. Install on **both** phones (allow unknown sources).
+2. **Both phones:** open **BW Transport Test**, grant the Bluetooth permissions.
+3. **Phone A:** tap **Advertise** → accept the system "make discoverable" prompt. **Phone B:** tap **Discover**.
+4. Validate against the on-screen log:
+   - A appears in B's **Nearby** list (nickname + signal + MAC) → classic inquiry discovery ✔
+   - Tap A on B → A shows **Incoming** → **Accept** → RFCOMM connect + app handshake ✔
+   - Both show a **6-digit code**; verify they **match**, tap **Match** on both → state `🔒` → KEX + SAS ✔
+   - Type → **Send** → appears on the peer → encrypted messaging ✔
+   - **Send file** (a few MB) → `XFER` progress both sides, `FILE RECV` on receiver → chunked AES file transfer ✔
+5. Paste the log lines back; failures pinpoint what to fix before the flip.
+
+**Known limitations:** emulators cannot test this (no BT radio). Classic discoverability requires the
+system prompt (max 300 s) launched from an Activity (the harness does this; production Home must too).
+`getAddress()` is blocked on Android 8+, so the nonce (not MAC) drives KEX-initiator election and tie-break.
