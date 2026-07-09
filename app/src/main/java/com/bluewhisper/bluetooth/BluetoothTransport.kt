@@ -233,7 +233,7 @@ class BluetoothTransport @Inject constructor(
                 if (hasScanPermission()) {
                     if (a.isDiscovering) a.cancelDiscovery()
                     val started = a.startDiscovery() // fires ACTION_FOUND per device, then ACTION_DISCOVERY_FINISHED
-                    dlog("inquiry cycle: startDiscovery() -> $started")
+                    dlog("inquiry cycle: startDiscovery() -> $started, isDiscovering=${a.isDiscovering}")
                     if (!started) dlog("  ⚠ startDiscovery() returned false — adapter busy, BT off, or permission/location missing")
                 } else {
                     dlog("inquiry cycle skipped: scan permission not granted")
@@ -250,6 +250,7 @@ class BluetoothTransport @Inject constructor(
     private fun registerDiscoveryReceiver() {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context?, intent: Intent?) {
+                dlog("bcast: ${intent?.action?.substringAfterLast('.') ?: "?"}")
                 when (intent?.action) {
                     BluetoothDevice.ACTION_FOUND -> onDeviceFound(intent)
                     BluetoothAdapter.ACTION_DISCOVERY_FINISHED ->
@@ -263,6 +264,7 @@ class BluetoothTransport @Inject constructor(
         }
         ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         discoveryReceiver = receiver
+        dlog("discovery receiver registered (listening for ACTION_FOUND / ACTION_DISCOVERY_FINISHED)")
     }
 
     @SuppressLint("MissingPermission")
