@@ -126,6 +126,7 @@ class BluetoothTransport @Inject constructor(
     private var serverSocket: BluetoothServerSocket? = null
     private var acceptJob: Job? = null
     private var savedAdapterName: String? = null
+    private var scanModeReceiver: BroadcastReceiver? = null
 
     // ── Advertising ──────────────────────────────────────────────────────────
     @SuppressLint("MissingPermission")
@@ -135,6 +136,7 @@ class BluetoothTransport @Inject constructor(
         try {
             if (savedAdapterName == null) savedAdapterName = a.name
             val wanted = "$NAME_PREFIX$nickname|$avatarId"
+            registerScanModeReceiver()
             a.setName(wanted)
             startServer()
             emit(BTEvent.AdvertisingStarted)
@@ -165,6 +167,8 @@ class BluetoothTransport @Inject constructor(
         try { serverSocket?.close() } catch (_: Exception) {}
         serverSocket = null
         acceptJob?.cancel(); acceptJob = null
+        scanModeReceiver?.let { try { context.unregisterReceiver(it) } catch (_: Exception) {} }
+        scanModeReceiver = null
         try { if (hasConnectPermission()) savedAdapterName?.let { adapter?.setName(it) } } catch (_: Exception) {}
         savedAdapterName = null
     }
@@ -570,14 +574,33 @@ class BluetoothTransport @Inject constructor(
 
     /** Human-readable Bluetooth scan mode — tells us whether this phone is actually DISCOVERABLE. */
     @SuppressLint("MissingPermission")
-    private fun scanModeName(): String = try {
-        when (adapter?.scanMode) {
-            BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE -> "DISCOVERABLE"
-            BluetoothAdapter.SCAN_MODE_CONNECTABLE -> "connectable-only (NOT discoverable — accept the prompt)"
-            BluetoothAdapter.SCAN_MODE_NONE -> "none"
-            else -> "unknown(${adapter?.scanMode})"
+    private fun scanModeName(): String =
+        try { scanModeLabel(adapter?.scanMode ?: Int.MIN_VALUE) } catch (_: Exception) { "unavailable" }
+
+    private fun scanModeLabel(mode: Int): String = when (mode) {
+        BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE -> "DISCOVERABLE"
+        BluetoothAdapter.SCAN_MODE_CONNECTABLE -> "connectable-only (NOT discoverable — accept the prompt)"
+        BluetoothAdapter.SCAN_MODE_NONE -> "none"
+        else -> "unknown($mode)"
+    }
+
+    /** Watch scan-mode transitions so we can see the exact moment the phone becomes DISCOVERABLE
+     *  (or prove it never does, even after the user accepts the system prompt — e.g. MIUI). */
+    private fun registerScanModeReceiver() {
+        if (scanModeReceiver != null) return
+        val r = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                if (intent?.action == BluetoothAdapter.ACTION_SCAN_MODE_CHANGED) {
+                    val mode = intent.getIntExtra(BluetoothAdapter.EXTRA_SCAN_MODE, Int.MIN_VALUE)
+                    dlog("scanMode CHANGED -> ${scanModeLabel(mode)}")
+                }
+            }
         }
-    } catch (_: Exception) { "unavailable" }
+        ContextCompat.registerReceiver(
+            context, r, IntentFilter(BluetoothAdapter.ACTION_SCAN_MODE_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        scanModeReceiver = r
+    }
 
     /** Whether the system Location Services toggle is ON — required for classic discovery on most Android versions. */
     private fun locationEnabled(): Boolean = try {
