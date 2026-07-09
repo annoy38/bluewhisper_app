@@ -72,6 +72,7 @@ class TransportTestViewModel @Inject constructor(
         }
         viewModelScope.launch { transport.incomingPackets.collect { pkt -> log("RECV[${pkt.tp}] ${pkt.c}") } }
         viewModelScope.launch { transport.incomingFiles.collect { f -> log("FILE RECV ${f.metadata.fileName} -> ${f.tempPath}") } }
+        viewModelScope.launch { transport.debugLog.collect { line -> log(line) } }
     }
 
     fun advertise() { transport.startAdvertising(nickname, 1); log("startAdvertising($nickname)") }

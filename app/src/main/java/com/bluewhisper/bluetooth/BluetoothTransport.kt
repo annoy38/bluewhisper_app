@@ -12,8 +12,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.location.LocationManagerCompat
 import com.bluewhisper.bluetooth.wire.Control
 import com.bluewhisper.domain.model.ActiveSession
 import com.bluewhisper.domain.model.ConnectionState
@@ -94,6 +96,15 @@ class BluetoothTransport @Inject constructor(
     private val _events = MutableSharedFlow<BTEvent>(replay = 0, extraBufferCapacity = 16)
     override val events: SharedFlow<BTEvent> = _events.asSharedFlow()
 
+    /**
+     * DEBUG diagnostics stream. Mirrors internal Logcat lines so the on-device test
+     * harness can display them on-screen (no USB cable / adb needed). Not part of the
+     * [Transport] interface — only the debug harness, which injects the concrete class,
+     * collects it.
+     */
+    private val _debugLog = MutableSharedFlow<String>(replay = 0, extraBufferCapacity = 128)
+    val debugLog: SharedFlow<String> = _debugLog.asSharedFlow()
+
     // ── Session/connection bookkeeping ───────────────────────────────────────
     private var connection: RfcommConnection? = null
     private var session: ActiveSession? = null
@@ -123,9 +134,11 @@ class BluetoothTransport @Inject constructor(
         if (!hasConnectPermission()) { emit(BTEvent.Error("Bluetooth permission missing")); return }
         try {
             if (savedAdapterName == null) savedAdapterName = a.name
-            a.setName("$NAME_PREFIX$nickname|$avatarId")
+            val wanted = "$NAME_PREFIX$nickname|$avatarId"
+            a.setName(wanted)
             startServer()
             emit(BTEvent.AdvertisingStarted)
+            dlog("advertise: requested adapter name='$wanted', current='${adapterNameSafe()}' — name change is ASYNC and may take a few seconds to broadcast over the air; the peer must ACCEPT the 'make discoverable' system prompt too")
             // NOTE: to be *found by inquiry*, the UI must also launch
             // ACTION_REQUEST_DISCOVERABLE (US-3.4) — the service cannot start an Activity.
         } catch (e: SecurityException) {
@@ -163,6 +176,14 @@ class BluetoothTransport @Inject constructor(
     override fun startDiscovery() {
         if (discovering) return
         discovering = true
+        dlog(
+            "discover: sdk=${android.os.Build.VERSION.SDK_INT} btEnabled=${adapter?.isEnabled} " +
+                "scanPerm=${hasScanPermission()} connPerm=${hasConnectPermission()} locationServicesOn=${locationEnabled()} " +
+                "myAdapterName='${adapterNameSafe()}'"
+        )
+        if (adapter?.isEnabled != true) dlog("  ⚠ Bluetooth is OFF — turn it on")
+        if (!hasScanPermission()) dlog("  ⚠ BLUETOOTH_SCAN / location permission NOT granted — discovery will find nothing")
+        if (!locationEnabled()) dlog("  ⚠ Location Services toggle is OFF — classic discovery returns NOTHING on most Android versions; turn it on")
         registerDiscoveryReceiver()
         staleJob = scope.launch {
             while (isActive) {
@@ -191,10 +212,15 @@ class BluetoothTransport @Inject constructor(
             try {
                 if (hasScanPermission()) {
                     if (a.isDiscovering) a.cancelDiscovery()
-                    a.startDiscovery() // fires ACTION_FOUND per device, then ACTION_DISCOVERY_FINISHED
+                    val started = a.startDiscovery() // fires ACTION_FOUND per device, then ACTION_DISCOVERY_FINISHED
+                    dlog("inquiry cycle: startDiscovery() -> $started")
+                    if (!started) dlog("  ⚠ startDiscovery() returned false — adapter busy, BT off, or permission/location missing")
+                } else {
+                    dlog("inquiry cycle skipped: scan permission not granted")
                 }
             } catch (e: SecurityException) {
                 Log.e(TAG, "startDiscovery blocked: ${e.message}")
+                dlog("inquiry cycle: startDiscovery blocked (SecurityException): ${e.message}")
             }
             // One inquiry lasts ~12s; ACTION_DISCOVERY_FINISHED restarts via the pause below.
             delay(12_000 + SCAN_PAUSE_MS) // active window + battery pause (US-3.7)
@@ -206,7 +232,8 @@ class BluetoothTransport @Inject constructor(
             override fun onReceive(ctx: Context?, intent: Intent?) {
                 when (intent?.action) {
                     BluetoothDevice.ACTION_FOUND -> onDeviceFound(intent)
-                    BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> { /* duty cycle re-arms in the loop */ }
+                    BluetoothAdapter.ACTION_DISCOVERY_FINISHED ->
+                        dlog("inquiry FINISHED — BlueWhisper peers so far: ${_nearbyDevices.value.size} (duty cycle re-arms)")
                 }
             }
         }
@@ -223,15 +250,26 @@ class BluetoothTransport @Inject constructor(
     private fun onDeviceFound(intent: Intent) {
         val device: BluetoothDevice = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE) ?: return
         val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, Short.MIN_VALUE).toInt()
-        val name = try { if (hasConnectPermission()) device.name else null } catch (_: SecurityException) { null }
-            ?: return
-        if (!name.startsWith(NAME_PREFIX)) return // not a BlueWhisper peer
+
+        // The freshly-inquired name (from the inquiry response / EIR). `device.name` is the
+        // locally-CACHED name and is frequently null on the FIRST ACTION_FOUND — the real name
+        // resolves in a later callback. Prefer the intent extra, fall back to the cached name.
+        val extraName = intent.getStringExtra(BluetoothDevice.EXTRA_NAME)
+        val cachedName = try { if (hasConnectPermission()) device.name else null } catch (_: SecurityException) { null }
+        val name = extraName ?: cachedName
+        val mac = try { device.address } catch (_: SecurityException) { null }
+
+        dlog("found: mac=$mac rssi=$rssi inquiryName='$extraName' cachedName='$cachedName'")
+
+        if (mac == null) { dlog("  -> no MAC (permission?), ignoring"); return }
+        if (name == null) { dlog("  -> name not resolved yet; will re-check on next inquiry cycle"); return }
+        if (!name.startsWith(NAME_PREFIX)) { dlog("  -> not a BlueWhisper peer, ignoring"); return }
 
         val parts = name.removePrefix(NAME_PREFIX).split("|")
         val nickname = parts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: return
         val avatarId = parts.getOrNull(1)?.toIntOrNull() ?: 1
-        val mac = try { device.address } catch (_: SecurityException) { return }
 
+        dlog("  -> ✅ BlueWhisper peer: nickname='$nickname' mac=$mac")
         val entry = NearbyDevice(
             endpointId = mac,
             nickname = nickname,
@@ -505,6 +543,22 @@ class BluetoothTransport @Inject constructor(
 
     // ── Helpers ────────────────────────────────────────────────────────────────
     private fun emit(event: BTEvent) { scope.launch { _events.emit(event) } }
+
+    /** Log to Logcat AND to the on-screen debug stream (so device testing needs no adb cable). */
+    private fun dlog(msg: String) {
+        Log.d(TAG, msg)
+        scope.launch { _debugLog.emit(msg) }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun adapterNameSafe(): String? =
+        try { if (hasConnectPermission()) adapter?.name else null } catch (_: Exception) { null }
+
+    /** Whether the system Location Services toggle is ON — required for classic discovery on most Android versions. */
+    private fun locationEnabled(): Boolean = try {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        lm != null && LocationManagerCompat.isLocationEnabled(lm)
+    } catch (_: Exception) { false }
 
     private fun newNonce(): String = "%016x".format(SecureRandom().nextLong())
 
