@@ -262,12 +262,12 @@ class BluetoothTransport @Inject constructor(
             addAction(BluetoothDevice.ACTION_FOUND)
             addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
         }
-        // ACTION_FOUND / ACTION_DISCOVERY_FINISHED are SYSTEM broadcasts — they must be received
-        // with RECEIVER_EXPORTED. RECEIVER_NOT_EXPORTED silently drops them (only accepts broadcasts
-        // sent by our own app), which is why the inquiry ran but we received nothing.
-        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
+        // ACTION_FOUND / ACTION_DISCOVERY_FINISHED are protected system broadcasts and ARE delivered
+        // to NOT_EXPORTED runtime receivers. Keep NOT_EXPORTED: exporting would let a malicious app
+        // inject spoofed ACTION_FOUND (fake peers) into a security-sensitive app.
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         discoveryReceiver = receiver
-        dlog("discovery receiver registered EXPORTED (ACTION_FOUND / ACTION_DISCOVERY_FINISHED)")
+        dlog("discovery receiver registered (ACTION_FOUND / ACTION_DISCOVERY_FINISHED)")
     }
 
     @SuppressLint("MissingPermission")
@@ -604,7 +604,7 @@ class BluetoothTransport @Inject constructor(
             }
         }
         ContextCompat.registerReceiver(
-            context, r, IntentFilter(BluetoothAdapter.ACTION_SCAN_MODE_CHANGED), ContextCompat.RECEIVER_EXPORTED
+            context, r, IntentFilter(BluetoothAdapter.ACTION_SCAN_MODE_CHANGED), ContextCompat.RECEIVER_NOT_EXPORTED
         )
         scanModeReceiver = r
     }
