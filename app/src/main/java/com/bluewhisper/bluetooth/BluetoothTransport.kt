@@ -138,7 +138,21 @@ class BluetoothTransport @Inject constructor(
             a.setName(wanted)
             startServer()
             emit(BTEvent.AdvertisingStarted)
-            dlog("advertise: requested adapter name='$wanted', current='${adapterNameSafe()}' — name change is ASYNC and may take a few seconds to broadcast over the air; the peer must ACCEPT the 'make discoverable' system prompt too")
+            dlog("advertise: requested name='$wanted' current='${adapterNameSafe()}' scanMode=${scanModeName()} — you MUST accept the 'make discoverable' prompt on THIS phone, or the peer can't find it")
+            // setName is async (often several seconds, sometimes blocked on some OEMs like MIUI).
+            // Watch until the adapter actually reports the new name, so we know the peer's inquiry
+            // will see 'BW|...' rather than the old device name. Also re-report scanMode so we can
+            // confirm the phone really became discoverable after the system prompt.
+            scope.launch {
+                repeat(24) { i ->
+                    delay(500)
+                    if (adapterNameSafe() == wanted) {
+                        dlog("advertise: ✅ adapter name applied '${adapterNameSafe()}' (~${(i + 1) * 500}ms), scanMode=${scanModeName()}")
+                        return@launch
+                    }
+                }
+                dlog("advertise: ⚠ name still '${adapterNameSafe()}' after 12s — setName did NOT apply (OEM restriction?); scanMode=${scanModeName()}")
+            }
             // NOTE: to be *found by inquiry*, the UI must also launch
             // ACTION_REQUEST_DISCOVERABLE (US-3.4) — the service cannot start an Activity.
         } catch (e: SecurityException) {
@@ -553,6 +567,17 @@ class BluetoothTransport @Inject constructor(
     @SuppressLint("MissingPermission")
     private fun adapterNameSafe(): String? =
         try { if (hasConnectPermission()) adapter?.name else null } catch (_: Exception) { null }
+
+    /** Human-readable Bluetooth scan mode — tells us whether this phone is actually DISCOVERABLE. */
+    @SuppressLint("MissingPermission")
+    private fun scanModeName(): String = try {
+        when (adapter?.scanMode) {
+            BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE -> "DISCOVERABLE"
+            BluetoothAdapter.SCAN_MODE_CONNECTABLE -> "connectable-only (NOT discoverable — accept the prompt)"
+            BluetoothAdapter.SCAN_MODE_NONE -> "none"
+            else -> "unknown(${adapter?.scanMode})"
+        }
+    } catch (_: Exception) { "unavailable" }
 
     /** Whether the system Location Services toggle is ON — required for classic discovery on most Android versions. */
     private fun locationEnabled(): Boolean = try {
