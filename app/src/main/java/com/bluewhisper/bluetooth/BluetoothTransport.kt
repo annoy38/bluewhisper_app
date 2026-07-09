@@ -196,12 +196,14 @@ class BluetoothTransport @Inject constructor(
         discovering = true
         dlog(
             "discover: sdk=${android.os.Build.VERSION.SDK_INT} btEnabled=${adapter?.isEnabled} " +
-                "scanPerm=${hasScanPermission()} connPerm=${hasConnectPermission()} locationServicesOn=${locationEnabled()} " +
-                "myAdapterName='${adapterNameSafe()}'"
+                "scanPerm=${hasScanPermission()} connPerm=${hasConnectPermission()} fineLocationPerm=${hasFineLocation()} " +
+                "locationServicesOn=${locationEnabled()} myAdapterName='${adapterNameSafe()}'"
         )
         if (adapter?.isEnabled != true) dlog("  ⚠ Bluetooth is OFF — turn it on")
-        if (!hasScanPermission()) dlog("  ⚠ BLUETOOTH_SCAN / location permission NOT granted — discovery will find nothing")
-        if (!locationEnabled()) dlog("  ⚠ Location Services toggle is OFF — classic discovery returns NOTHING on most Android versions; turn it on")
+        if (!hasScanPermission()) dlog("  ⚠ scan permission NOT granted — discovery will find nothing")
+        if (android.os.Build.VERSION.SDK_INT < 31 && !hasFineLocation())
+            dlog("  ⚠ ACCESS_FINE_LOCATION NOT granted — on Android ≤11 classic discovery returns NO devices even with the Location toggle on; grant Location to this app in Settings")
+        if (!locationEnabled()) dlog("  ⚠ Location Services toggle is OFF — classic discovery returns NOTHING; turn it on")
         registerDiscoveryReceiver()
         staleJob = scope.launch {
             while (isActive) {
@@ -614,7 +616,14 @@ class BluetoothTransport @Inject constructor(
         android.os.Build.VERSION.SDK_INT < 31 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 
+    // Classic discovery (ACTION_FOUND) needs BLUETOOTH_SCAN on API 31+, and ACCESS_FINE_LOCATION
+    // on API 26–30. Without location permission the inquiry still "starts" (returns true) but the
+    // system delivers NO results — the exact symptom seen on the Android 10 discoverer.
     private fun hasScanPermission(): Boolean =
-        android.os.Build.VERSION.SDK_INT < 31 ||
+        if (android.os.Build.VERSION.SDK_INT >= 31)
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+        else hasFineLocation()
+
+    private fun hasFineLocation(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 }
