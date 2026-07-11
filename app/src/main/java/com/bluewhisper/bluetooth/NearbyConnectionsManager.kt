@@ -471,6 +471,22 @@ sealed class BTEvent {
     data class Connected(val session: ActiveSession) : BTEvent()
     object ConnectionRejected : BTEvent()
     object Disconnected : BTEvent()
+
+    /**
+     * Key exchange produced a shared secret and both peers should now compare a
+     * short numeric [code] (US-6.1). The UI shows [code] and calls
+     * Transport.confirmKeyMatch(accepted) with the user's verdict.
+     */
+    data class KeyConfirmationRequired(val code: String) : BTEvent()
+
+    /** Either peer rejected the numeric code — session aborts, return Home (US-6.1). */
+    object KeyConfirmationRejected : BTEvent()
+
+    /** Key exchange failed or timed out — abort, error, return Home; no plaintext (US-6.4). */
+    data class KeyExchangeFailed(val message: String) : BTEvent()
+
+    /** Both peers confirmed; the AES session key is active and chat may open. */
     object SessionKeyReady : BTEvent()
+
     data class Error(val message: String) : BTEvent()
 }
