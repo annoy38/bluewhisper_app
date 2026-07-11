@@ -133,6 +133,9 @@ class BluetoothTransport @Inject constructor(
     override fun startAdvertising(nickname: String, avatarId: Int) {
         val a = adapter ?: return
         if (!hasConnectPermission()) { emit(BTEvent.Error("Bluetooth permission missing")); return }
+        // Radio-mode exclusion: a classic-BT adapter cannot reliably run an inquiry while it is
+        // discoverable/serving. Never let both modes run at once — drop discovery before advertising.
+        if (discovering) { dlog("advertise: stopping in-flight discovery first (radio modes are mutually exclusive)"); stopDiscovery() }
         try {
             if (savedAdapterName == null) savedAdapterName = a.name
             val wanted = "$NAME_PREFIX$nickname|$avatarId"
@@ -193,17 +196,26 @@ class BluetoothTransport @Inject constructor(
     // ── Discovery (classic inquiry) ──────────────────────────────────────────
     override fun startDiscovery() {
         if (discovering) return
+        // Radio-mode exclusion (the root cause of "startDiscovery()->true but no results"): classic
+        // BT cannot run an inquiry while this phone is discoverable / running the RFCOMM accept loop.
+        // Drop advertising before inquiring so the radio is in a single, clean mode.
+        stopAdvertising()
         discovering = true
         dlog(
             "discover: sdk=${android.os.Build.VERSION.SDK_INT} btEnabled=${adapter?.isEnabled} " +
                 "scanPerm=${hasScanPermission()} connPerm=${hasConnectPermission()} fineLocationPerm=${hasFineLocation()} " +
-                "locationServicesOn=${locationEnabled()} myAdapterName='${adapterNameSafe()}'"
+                "locationServicesOn=${locationEnabled()} myAdapterName='${adapterNameSafe()}' scanMode=${scanModeName()}"
         )
         if (adapter?.isEnabled != true) dlog("  ⚠ Bluetooth is OFF — turn it on")
         if (!hasScanPermission()) dlog("  ⚠ scan permission NOT granted — discovery will find nothing")
-        if (android.os.Build.VERSION.SDK_INT < 31 && !hasFineLocation())
-            dlog("  ⚠ ACCESS_FINE_LOCATION NOT granted — on Android ≤11 classic discovery returns NO devices even with the Location toggle on; grant Location to this app in Settings")
+        if (!hasFineLocation())
+            dlog("  ⚠ ACCESS_FINE_LOCATION NOT granted — classic discovery returns NO devices without it (all API levels, since we don't assert neverForLocation); grant Location to this app in Settings")
         if (!locationEnabled()) dlog("  ⚠ Location Services toggle is OFF — classic discovery returns NOTHING; turn it on")
+        // The one blocker we CANNOT clear in software: an active ACTION_REQUEST_DISCOVERABLE window
+        // (up to 300s) keeps the adapter discoverable, and most stacks refuse to inquire while
+        // discoverable. There is no API to end it early — toggle Bluetooth off/on to reset.
+        if (adapter?.scanMode == BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE)
+            dlog("  ⚠ this phone is STILL DISCOVERABLE (a prior 'make discoverable' window is active). Classic BT usually can't inquire while discoverable — toggle Bluetooth OFF then ON on THIS phone, then Discover again.")
         registerDiscoveryReceiver()
         staleJob = scope.launch {
             while (isActive) {
@@ -231,10 +243,17 @@ class BluetoothTransport @Inject constructor(
         while (scope.isActive && discovering) {
             try {
                 if (hasScanPermission()) {
-                    if (a.isDiscovering) a.cancelDiscovery()
-                    val started = a.startDiscovery() // fires ACTION_FOUND per device, then ACTION_DISCOVERY_FINISHED
-                    dlog("inquiry cycle: startDiscovery() -> $started, isDiscovering=${a.isDiscovering}")
-                    if (!started) dlog("  ⚠ startDiscovery() returned false — adapter busy, BT off, or permission/location missing")
+                    // cancelDiscovery() is async. Starting a new inquiry before the previous one has
+                    // fully stopped makes startDiscovery() return true yet never actually scan — so
+                    // wait for the adapter to settle to !isDiscovering before starting a fresh cycle.
+                    if (a.isDiscovering) {
+                        a.cancelDiscovery()
+                        var waited = 0
+                        while (a.isDiscovering && waited < 2_000) { delay(100); waited += 100 }
+                    }
+                    val started = a.startDiscovery() // fires ACTION_DISCOVERY_STARTED, ACTION_FOUND per device, then ACTION_DISCOVERY_FINISHED
+                    dlog("inquiry cycle: startDiscovery() -> $started (waiting for STARTED/FOUND/FINISHED broadcasts)")
+                    if (!started) dlog("  ⚠ startDiscovery() returned false — adapter busy, BT off, still discoverable, or permission/location missing")
                 } else {
                     dlog("inquiry cycle skipped: scan permission not granted")
                 }
@@ -242,7 +261,7 @@ class BluetoothTransport @Inject constructor(
                 Log.e(TAG, "startDiscovery blocked: ${e.message}")
                 dlog("inquiry cycle: startDiscovery blocked (SecurityException): ${e.message}")
             }
-            // One inquiry lasts ~12s; ACTION_DISCOVERY_FINISHED restarts via the pause below.
+            // One inquiry lasts ~12s; ACTION_DISCOVERY_FINISHED confirms it ran. Pause, then re-arm.
             delay(12_000 + SCAN_PAUSE_MS) // active window + battery pause (US-3.7)
         }
     }
@@ -252,6 +271,8 @@ class BluetoothTransport @Inject constructor(
             override fun onReceive(ctx: Context?, intent: Intent?) {
                 dlog("bcast: ${intent?.action?.substringAfterLast('.') ?: "?"}")
                 when (intent?.action) {
+                    BluetoothAdapter.ACTION_DISCOVERY_STARTED ->
+                        dlog("inquiry STARTED — the radio is now actually scanning ✅ (if this never appears, the adapter refused to inquire: still discoverable, or perms/location)")
                     BluetoothDevice.ACTION_FOUND -> onDeviceFound(intent)
                     BluetoothAdapter.ACTION_DISCOVERY_FINISHED ->
                         dlog("inquiry FINISHED — BlueWhisper peers so far: ${_nearbyDevices.value.size} (duty cycle re-arms)")
@@ -259,6 +280,7 @@ class BluetoothTransport @Inject constructor(
             }
         }
         val filter = IntentFilter().apply {
+            addAction(BluetoothAdapter.ACTION_DISCOVERY_STARTED)
             addAction(BluetoothDevice.ACTION_FOUND)
             addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
         }
@@ -621,12 +643,14 @@ class BluetoothTransport @Inject constructor(
         android.os.Build.VERSION.SDK_INT < 31 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 
-    // Classic discovery (ACTION_FOUND) needs BLUETOOTH_SCAN on API 31+, and ACCESS_FINE_LOCATION
-    // on API 26–30. Without location permission the inquiry still "starts" (returns true) but the
-    // system delivers NO results — the exact symptom seen on the Android 10 discoverer.
+    // Classic discovery (ACTION_FOUND) needs BLUETOOTH_SCAN on API 31+, PLUS ACCESS_FINE_LOCATION
+    // on every version (we don't assert neverForLocation, so the OS treats inquiry as
+    // location-derived on 31+ too). Without location permission the inquiry still "starts"
+    // (returns true) but the system delivers NO results — the exact symptom seen on the discoverer.
     private fun hasScanPermission(): Boolean =
         if (android.os.Build.VERSION.SDK_INT >= 31)
-            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED &&
+                hasFineLocation()
         else hasFineLocation()
 
     private fun hasFineLocation(): Boolean =

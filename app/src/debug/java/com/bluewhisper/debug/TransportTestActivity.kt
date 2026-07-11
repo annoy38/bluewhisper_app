@@ -60,10 +60,13 @@ class TransportTestActivity : ComponentActivity() {
 
     private fun requiredPermissions(): Array<String> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // FINE_LOCATION is still required on API 31+ because the manifest does NOT assert
+            // neverForLocation — classic inquiry returns no results without it.
             arrayOf(
                 Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.BLUETOOTH_CONNECT,
                 Manifest.permission.BLUETOOTH_ADVERTISE,
+                Manifest.permission.ACCESS_FINE_LOCATION,
             )
         } else {
             arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)

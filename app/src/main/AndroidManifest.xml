@@ -11,9 +11,13 @@
         android:maxSdkVersion="30" />
 
     <!-- ── Bluetooth Permissions (API 31+) ── -->
+    <!-- NOTE: do NOT set usesPermissionFlags="neverForLocation" here. Classic Bluetooth
+         inquiry (BluetoothAdapter.startDiscovery) is treated by the OS as a location-derived
+         operation; with neverForLocation the scan is accepted (startDiscovery returns true)
+         but the system delivers ZERO ACTION_FOUND results on Android 12+. BlueWhisper's
+         discovery is inherently proximity-based, so scanning must be allowed to observe it. -->
     <uses-permission
         android:name="android.permission.BLUETOOTH_SCAN"
-        android:usesPermissionFlags="neverForLocation"
         tools:targetApi="31" />
     <uses-permission
         android:name="android.permission.BLUETOOTH_CONNECT"
@@ -22,10 +26,12 @@
         android:name="android.permission.BLUETOOTH_ADVERTISE"
         tools:targetApi="31" />
 
-    <!-- ── Location (required for BLE on API 26–30) ── -->
-    <uses-permission
-        android:name="android.permission.ACCESS_FINE_LOCATION"
-        android:maxSdkVersion="30" />
+    <!-- ── Location ── -->
+    <!-- Required for classic Bluetooth inquiry (startDiscovery) to return results. On API 26–30
+         the OS mandates it for any BT scan; on API 31+ it is still required because we do NOT
+         assert neverForLocation (see the BLUETOOTH_SCAN note above). It is used ONLY to observe
+         nearby BlueWhisper peers — never for geolocation (US-1.2). -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission
         android:name="android.permission.ACCESS_COARSE_LOCATION"
         android:maxSdkVersion="30" />
